@@ -1,0 +1,5 @@
+# CODEOWNERS — every change to the formula or release pipelines must
+# be reviewed by the parqtel maintainers. The default reviewer is the
+# org owner; expand the list as the tap grows additional formulae.
+
+*                       @parqtel/parqtel-oss-maintainers

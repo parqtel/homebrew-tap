@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keep GitHub Actions versions current. Grouped into a single PR
+  # per workflow to avoid dep-update noise.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+    labels: ["dependencies"]

@@ -1,0 +1,168 @@
+name: Update Formula
+
+# ── Purpose ──────────────────────────────────────────────────────────────
+# When parqtel/parqtel-oss publishes a new `v*` release, this workflow:
+#
+#   1. Reads the four per-platform tarballs published in
+#      parqtel/homebrew-tap/releases/tag/v<version> (built by
+#      build-tarballs.yml).
+#   2. Computes the sha256 of each tarball.
+#   3. Bumps Formula/parqtel-oss.rb (version + 4 url/sha256 blocks).
+#   4. Opens a PR against main with the changes.
+#
+# The PR triggers the audit workflow, which validates the new
+# `url` + `sha256` pair by actually downloading the tarball during
+# `brew install` on a Linux runner.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Target upstream parqtel-oss version (without leading 'v'), e.g. 0.2.0"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [parqtel-oss-release]
+  schedule:
+    # Twice daily, offset from the build-tarballs poll.
+    - cron: "47 6,18 * * *"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: update-formula
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Bump parqtel-oss formula
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute target version
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              VERSION="$INPUT_VERSION"
+              ;;
+            repository_dispatch)
+              VERSION=$(echo "$PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('version',''))")
+              ;;
+            schedule)
+              if [ ! -f Formula/parqtel-oss.rb ]; then
+                echo "::error::Formula/parqtel-oss.rb missing"; exit 1
+              fi
+              CURRENT=$(grep -E '^\s*version\s+"' Formula/parqtel-oss.rb | head -1 | sed -E 's/.*version[[:space:]]+"([^"]+)".*/\1/')
+              RESP=$(curl -sSL -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/parqtel/parqtel-oss/releases/latest")
+              TAG=$(echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tag_name',''))")
+              VERSION="${TAG#v}"
+              if [ -z "$VERSION" ] || [ "$VERSION" = "$CURRENT" ]; then
+                echo "::notice::No new upstream version (current=$CURRENT)."; exit 0
+              fi
+              ;;
+          esac
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve target version"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download per-platform tarballs
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p tarballs
+          BASE="https://github.com/parqtel/homebrew-tap/releases/download/v${VERSION}"
+          for art in parqtel-oss-darwin-amd64 parqtel-oss-darwin-arm64 parqtel-oss-linux-amd64 parqtel-oss-linux-arm64; do
+            echo "Downloading $art.tar.gz"
+            curl -sSLf -o "tarballs/${art}.tar.gz" "${BASE}/${art}.tar.gz" || {
+              echo "::error::Missing ${art}.tar.gz at ${BASE}/"; exit 1;
+            }
+          done
+          ls -lh tarballs/
+
+      - name: Compute sha256 per platform
+        id: sha
+        run: |
+          set -euo pipefail
+          # Each sha line: <os>_<arch>=<hex>
+          for f in tarballs/*.tar.gz; do
+            base=$(basename "$f" .tar.gz)        # parqtel-oss-darwin-arm64
+            os_arch="${base#parqtel-oss-}"        # darwin-arm64
+            arch="${os_arch#*-}"                  # arm64
+            kernel="${os_arch%%-*}"               # darwin
+            sha=$(sha256sum "$f" | cut -d' ' -f1)
+            key="SHA256_$(echo "$kernel" | tr a-z A-Z)_$(echo "$arch" | tr a-z A-Z)"
+            echo "$key=$sha" >> "$GITHUB_OUTPUT"
+            echo "  $base -> $key=$sha"
+          done
+
+      - name: Update Formula/parqtel-oss.rb
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+          SHA_DARWIN_AMD64: ${{ steps.sha.outputs.SHA256_DARWIN_AMD64 }}
+          SHA_DARWIN_ARM64: ${{ steps.sha.outputs.SHA256_DARWIN_ARM64 }}
+          SHA_LINUX_AMD64:  ${{ steps.sha.outputs.SHA256_LINUX_AMD64 }}
+          SHA_LINUX_ARM64:  ${{ steps.sha.outputs.SHA256_LINUX_ARM64 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, pathlib
+          version = os.environ["VERSION"]
+          shas = {
+              "DARWIN_AMD64": os.environ["SHA_DARWIN_AMD64"],
+              "DARWIN_ARM64": os.environ["SHA_DARWIN_ARM64"],
+              "LINUX_AMD64":  os.environ["SHA_LINUX_AMD64"],
+              "LINUX_ARM64":  os.environ["SHA_LINUX_ARM64"],
+          }
+          f = pathlib.Path("Formula/parqtel-oss.rb")
+          s = f.read_text()
+          # Bump version
+          s = re.sub(r'^\s*version\s+"[^"]+"\s*$', f'  version "{version}"', s, count=1, flags=re.M)
+          # Replace each placeholder sha256
+          for key, hex_ in shas.items():
+              s = s.replace(f"__SHA256_{key}__", hex_)
+          f.write_text(s)
+          print(s)
+          PY
+
+      - name: Configure git
+        run: |
+          git config user.name "parqtel-bot"
+          git config user.email "parqtel-bot@users.noreply.github.com"
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bump/parqtel-oss-${{ steps.target.outputs.version }}
+          title: "parqtel-oss ${{ steps.target.outputs.version }}"
+          commit-message: "parqtel-oss ${{ steps.target.outputs.version }}"
+          body: |
+            Bumps parqtel-oss to **${{ steps.target.outputs.version }}**.
+
+            - Source: parqtel/parqtel-oss @ v${{ steps.target.outputs.version }}
+            - Binaries: parqtel/homebrew-tap/releases/tag/v${{ steps.target.outputs.version }}
+
+            | Platform | sha256 |
+            | -------- | ------ |
+            | darwin-amd64 | `${{ steps.sha.outputs.SHA256_DARWIN_AMD64 }}` |
+            | darwin-arm64 | `${{ steps.sha.outputs.SHA256_DARWIN_ARM64 }}` |
+            | linux-amd64  | `${{ steps.sha.outputs.SHA256_LINUX_AMD64 }}` |
+            | linux-arm64  | `${{ steps.sha.outputs.SHA256_LINUX_ARM64 }}` |
+
+            Auto-generated by `.github/workflows/update-formula.yml`.
+          add-paths: |
+            Formula/parqtel-oss.rb
+          delete-branch: true

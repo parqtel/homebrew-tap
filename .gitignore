@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Ruby (Brew tooling)
+.bundle/
+vendor/bundle/
+*.gem
+
+# Build outputs (used locally for sanity-checking `brew bottle`)
+build/
+tarballs/
+
+# Local audit scratch
+*.tar.gz
+*.tar.gz.sha256
+!tarballs/.gitkeep
+!Formula/parqtel-oss.rb

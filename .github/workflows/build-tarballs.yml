@@ -1,0 +1,213 @@
+name: Build & Publish Tarballs
+
+# ── Purpose ──────────────────────────────────────────────────────────────
+# Builds the parqtel-oss binary from source on each upstream `v*` tag
+# and publishes per-platform tarballs (with .sha256 sidecars) as a
+# GitHub release in THIS tap repo. The Homebrew formula
+# (Formula/parqtel-oss.rb) pulls these prebuilt tarballs, so
+# `brew install parqtel-oss` is fast and does not require a Rust
+# toolchain on the user's machine.
+#
+# Triggers (in priority order):
+#   1. workflow_dispatch     — manual bootstrap (used for v0.1.0)
+#   2. repository_dispatch   — sent by parqtel/parqtel-oss release.yml
+#                              (see docs/RELEASE_COORDINATION.md)
+#   3. schedule              — daily poll of upstream `v*` tags, used
+#                              as a safety net if the webhook is lost
+#   4. push:v*               — manual override in this repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Upstream parqtel-oss tag (without leading 'v'), e.g. 0.1.0"
+        required: true
+        type: string
+      ref:
+        description: "Optional upstream ref (commit/branch). Defaults to v<version>."
+        required: false
+        type: string
+        default: ""
+  repository_dispatch:
+    types: [parqtel-oss-release]
+  schedule:
+    - cron: "17 6 * * *"
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-tarballs
+  cancel-in-progress: true
+
+jobs:
+  resolve-version:
+    name: Resolve upstream version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      skip: ${{ steps.resolve.outputs.skip }}
+    steps:
+      - name: Compute version
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_REF: ${{ github.event.inputs.ref }}
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+        run: |
+          set -euo pipefail
+          VERSION=""
+          REF=""
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              VERSION="$INPUT_VERSION"
+              REF="${INPUT_REF:-v$VERSION}"
+              ;;
+            repository_dispatch)
+              VERSION=$(echo "$PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('version',''))")
+              REF=$(echo "$PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('ref','v'+d.get('version','')))")
+              ;;
+            push)
+              TAG="${EVENT_REF#refs/tags/}"
+              VERSION="${TAG#v}"
+              REF="$TAG"
+              ;;
+            schedule)
+              if [ ! -f Formula/parqtel-oss.rb ]; then
+                echo "::error::Formula/parqtel-oss.rb missing"; exit 1
+              fi
+              CURRENT=$(grep -E '^\s*version\s+"' Formula/parqtel-oss.rb | head -1 | sed -E 's/.*version[[:space:]]+"([^"]+)".*/\1/')
+              RESP=$(curl -sSL -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/parqtel/parqtel-oss/releases/latest")
+              TAG=$(echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tag_name',''))")
+              TAG="${TAG#v}"
+              if [ -z "$TAG" ]; then
+                echo "::error::Could not resolve latest upstream tag"; exit 1
+              fi
+              if [ "$TAG" = "$CURRENT" ]; then
+                echo "::notice::Tap formula already at upstream latest ($CURRENT); nothing to do."
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              VERSION="$TAG"
+              REF="v$TAG"
+              ;;
+          esac
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve upstream version"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Resolved upstream version: $VERSION (ref=$REF)"
+
+  build-binaries:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    needs: resolve-version
+    if: needs.resolve-version.outputs.skip != 'true' && needs.resolve-version.outputs.version != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: parqtel-oss-linux-amd64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: parqtel-oss-linux-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: parqtel-oss-darwin-amd64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: parqtel-oss-darwin-arm64
+    steps:
+      - name: Checkout upstream parqtel-oss
+        uses: actions/checkout@v4
+        with:
+          repository: parqtel/parqtel-oss
+          ref: ${{ needs.resolve-version.outputs.ref }}
+          fetch-depth: 1
+          path: upstream
+
+      - name: Setup Rust (from upstream composite action)
+        uses: ./upstream/.github/actions/setup-rust
+        with:
+          components: ""
+          targets: ${{ matrix.target }}
+          cache-key: tap-build-${{ matrix.target }}
+
+      - name: Install aarch64 cross-tools (Linux)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Build (--locked respects Cargo.lock)
+        working-directory: upstream
+        run: |
+          cargo build --release --locked -p parqtel-server --target ${{ matrix.target }}
+
+      - name: Package tarball
+        run: |
+          mkdir -p dist
+          cp upstream/target/${{ matrix.target }}/release/parqtel dist/parqtel
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            strip --strip-debug dist/parqtel
+          fi
+          tar -C dist -czf ${{ matrix.artifact }}.tar.gz parqtel
+          sha256sum ${{ matrix.artifact }}.tar.gz | tee ${{ matrix.artifact }}.tar.gz.sha256
+          ls -lh ${{ matrix.artifact }}.tar.gz*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish Tap Release v${{ needs.resolve-version.outputs.version }}
+    runs-on: ubuntu-latest
+    needs: [resolve-version, build-binaries]
+    if: needs.resolve-version.outputs.skip != 'true' && needs.resolve-version.outputs.version != ''
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Inventory
+        run: |
+          ls -lh artifacts/
+          echo "---SHA256---"
+          cat artifacts/*.sha256
+
+      - name: Create / update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.resolve-version.outputs.version }}
+          name: parqtel-oss v${{ needs.resolve-version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.sha256
+          fail_on_unmatched_files: true
+          body: |
+            Prebuilt parqtel-oss binaries for Homebrew.
+
+            These tarballs are consumed by the parqtel-oss Homebrew
+            formula in parqtel/homebrew-tap. See
+            https://github.com/parqtel/homebrew-tap for install
+            instructions.
+
+            Built from parqtel/parqtel-oss @ `${{ needs.resolve-version.outputs.ref }}`.
+            Build log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

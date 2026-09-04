@@ -1,0 +1,75 @@
+name: Audit
+
+# ── Purpose ──────────────────────────────────────────────────────────────
+# Runs the standard Homebrew CI checks for every formula in this tap on
+# every push to main and every PR:
+#
+#   * brew style     — RuboCop rules (catches whitespace, deprecated
+#                      DSL, etc.)
+#   * brew audit     — best-practice checks (URLs reachable, license
+#                      SPDX, sha256 length, etc.)
+#   * brew install   — actually installs the formula in a fresh
+#                      Linux container (the test block + install
+#                      path are exercised end-to-end)
+#   * brew test      — runs the formula's `test do` block
+#
+# Runs on Linux only — `brew audit` itself is cross-platform, and
+# `brew install` on macOS runners would burn through minutes of
+# paid build time per run. Linux runner matches the matrix most
+# users will hit on Linux desktops / CI.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: brew audit / style / install / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+        with:
+          # Pin to a recent stable Homebrew version for reproducibility.
+          # Bump quarterly.
+          version: 4.4.18
+
+      - name: Tap self
+        run: brew tap parqtel/tap ${{ github.workspace }}
+
+      - name: brew style
+        run: brew style --fix=never parqtel/tap
+
+      - name: brew audit (online — checks URL reachability)
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+        run: brew audit --strict --online parqtel/tap/parqtel-oss
+
+      - name: brew install (Linux amd64)
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+          # Force a fresh source build (skip any pre-poured bottle)
+          # so the audit validates the formula's own install path.
+          HOMEBREW_BUILD_FROM_SOURCE: "1"
+        run: brew install --build-from-source parqtel/tap/parqtel-oss
+
+      - name: brew test
+        run: brew test parqtel/tap/parqtel-oss
+
+      - name: brew info (sanity)
+        run: brew info parqtel/tap/parqtel-oss
