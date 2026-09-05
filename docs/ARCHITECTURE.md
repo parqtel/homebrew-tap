@@ -34,3 +34,14 @@ We chose **#3** because:
 - **Bottles**: once a few versions are in the tap, add a `bottle do ... end` block to the formula and a `brew bottle` job to `build-tarballs.yml`. Bottles give `brew install` a prebuilt keg (no decompression/recompression at install time, faster by ~3×).
 - **Homebrew-core submission**: once v1.0.0 lands and the formula has been stable for a few months, submit to `homebrew-core` (single source-of-truth formula, no tap needed). The tap will keep working for users on the v0.x line.
 - **MCP server formulae**: when parqtel/parqtel-oss ships the MCP tool servers, add `parqtel-oss-mcp-slack`, `parqtel-oss-mcp-jira`, etc. formulae in this tap. They share the build matrix; reuse the `build-tarballs.yml` job matrix with a `crate` parameter.
+
+## Known false-positive: `version is redundant with version scanned from URL`
+
+The Homebrew `ResourceAuditor#audit_version` method warns when the explicit `version` field exactly equals a version parsed from the URL. This is a soft check that is unavoidable in self-hosted binary taps:
+
+1. The formula needs an explicit `version` because the URL uses `#{version}` interpolation (so the `update-formula.yml` workflow can stamp a new version into all four `url` blocks at once).
+2. The release tag (`v#{version}`) is itself a parseable version, so `Version.detect(url)` returns the same value as the explicit `version` field.
+
+The check is **skipped** in the CI `audit.yml` via `--except=version`. This is a deliberate, scoped decision: we keep every other `--strict --online` audit (URL reachability, license SPDX, sha256 length, git availability, etc.) and only silence the one false-positive. The justification is recorded in the workflow file inline.
+
+We cannot silence the warning in the formula (e.g. with a `rubocop:disable FormulaAudit/RedundantVersion` directive) because `brew style` rejects such directives in formulae — see `Style/DisableCopsWithinSourceCodeDirective` in `/opt/homebrew/Library/Homebrew/rubocops/lines.rb`.
