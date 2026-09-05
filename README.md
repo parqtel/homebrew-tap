@@ -62,10 +62,10 @@ This tap ships the **`parqtel-oss` formula** in [`Formula/parqtel-oss.rb`](Formu
 
 | Platform | Tarball |
 | --- | --- |
-| macOS Apple Silicon | `parqtel-oss-darwin-arm64.tar.gz` |
-| macOS Intel | `parqtel-oss-darwin-amd64.tar.gz` |
-| Linux arm64 | `parqtel-oss-linux-arm64.tar.gz` |
-| Linux x86_64 | `parqtel-oss-linux-amd64.tar.gz` |
+| macOS Apple Silicon | `parqtel-oss-v#{version}-darwin-arm64.tar.gz` |
+| macOS Intel | `parqtel-oss-v#{version}-darwin-amd64.tar.gz` |
+| Linux arm64 | `parqtel-oss-v#{version}-linux-arm64.tar.gz` |
+| Linux x86_64 | `parqtel-oss-v#{version}-linux-amd64.tar.gz` |
 
 The tarballs are **built from source** in CI on each upstream parqtel-oss release tag, then published as a release in this repo. The end-to-end pipeline is automated:
 

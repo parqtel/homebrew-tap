@@ -116,16 +116,16 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: parqtel-oss-linux-amd64
+            platform: linux-amd64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: parqtel-oss-linux-arm64
+            platform: linux-arm64
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact: parqtel-oss-darwin-amd64
+            platform: darwin-amd64
           - target: aarch64-apple-darwin
             os: macos-latest
-            artifact: parqtel-oss-darwin-arm64
+            platform: darwin-arm64
     steps:
       - name: Checkout upstream parqtel-oss
         uses: actions/checkout@v4
@@ -155,22 +155,26 @@ jobs:
           cargo build --release --locked -p parqtel-server --target ${{ matrix.target }}
 
       - name: Package tarball
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
+          set -euo pipefail
+          ARTIFACT="parqtel-oss-v${VERSION}-${{ matrix.platform }}"
           mkdir -p dist
           cp upstream/target/${{ matrix.target }}/release/parqtel dist/parqtel
           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
             strip --strip-debug dist/parqtel
           fi
-          tar -C dist -czf ${{ matrix.artifact }}.tar.gz parqtel
-          sha256sum ${{ matrix.artifact }}.tar.gz | tee ${{ matrix.artifact }}.tar.gz.sha256
-          ls -lh ${{ matrix.artifact }}.tar.gz*
+          tar -C dist -czf "${ARTIFACT}.tar.gz" parqtel
+          sha256sum "${ARTIFACT}.tar.gz" | tee "${ARTIFACT}.tar.gz.sha256"
+          ls -lh "${ARTIFACT}.tar.gz"*
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: parqtel-oss-${{ matrix.platform }}
           path: |
-            ${{ matrix.artifact }}.tar.gz
-            ${{ matrix.artifact }}.tar.gz.sha256
+            parqtel-oss-v${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz
+            parqtel-oss-v${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256
           if-no-files-found: error
           retention-days: 7
 

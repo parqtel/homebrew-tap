@@ -85,7 +85,7 @@ jobs:
           set -euo pipefail
           mkdir -p tarballs
           BASE="https://github.com/parqtel/homebrew-tap/releases/download/v${VERSION}"
-          for art in parqtel-oss-darwin-amd64 parqtel-oss-darwin-arm64 parqtel-oss-linux-amd64 parqtel-oss-linux-arm64; do
+          for art in parqtel-oss-v${VERSION}-darwin-amd64 parqtel-oss-v${VERSION}-darwin-arm64 parqtel-oss-v${VERSION}-linux-amd64 parqtel-oss-v${VERSION}-linux-arm64; do
             echo "Downloading $art.tar.gz"
             curl -sSLf -o "tarballs/${art}.tar.gz" "${BASE}/${art}.tar.gz" || {
               echo "::error::Missing ${art}.tar.gz at ${BASE}/"; exit 1;
@@ -95,14 +95,17 @@ jobs:
 
       - name: Compute sha256 per platform
         id: sha
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
         run: |
           set -euo pipefail
-          # Each sha line: <os>_<arch>=<hex>
+          # Filename pattern: parqtel-oss-v<version>-<kernel>-<arch>.tar.gz
           for f in tarballs/*.tar.gz; do
-            base=$(basename "$f" .tar.gz)        # parqtel-oss-darwin-arm64
-            os_arch="${base#parqtel-oss-}"        # darwin-arm64
-            arch="${os_arch#*-}"                  # arm64
-            kernel="${os_arch%%-*}"               # darwin
+            base=$(basename "$f" .tar.gz)        # parqtel-oss-v0.2.0-darwin-arm64
+            # Strip prefix and version: parqtel-oss-v0.2.0- -> darwin-arm64
+            suffix="${base#parqtel-oss-v${VERSION}-}"
+            arch="${suffix#*-}"                  # arm64
+            kernel="${suffix%%-*}"               # darwin
             sha=$(sha256sum "$f" | cut -d' ' -f1)
             key="SHA256_$(echo "$kernel" | tr a-z A-Z)_$(echo "$arch" | tr a-z A-Z)"
             echo "$key=$sha" >> "$GITHUB_OUTPUT"

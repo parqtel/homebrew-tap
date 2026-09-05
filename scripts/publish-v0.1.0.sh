@@ -29,10 +29,10 @@ if [ ! -d "$ASSETS" ]; then
 fi
 
 REQUIRED=(
-  "parqtel-oss-darwin-arm64.tar.gz"
-  "parqtel-oss-darwin-amd64.tar.gz"
-  "parqtel-oss-linux-arm64.tar.gz"
-  "parqtel-oss-linux-amd64.tar.gz"
+  "parqtel-oss-v${VERSION}-darwin-arm64.tar.gz"
+  "parqtel-oss-v${VERSION}-darwin-amd64.tar.gz"
+  "parqtel-oss-v${VERSION}-linux-arm64.tar.gz"
+  "parqtel-oss-v${VERSION}-linux-amd64.tar.gz"
 )
 for f in "${REQUIRED[@]}"; do
   if [ ! -f "$ASSETS/$f" ]; then
