@@ -1,16 +1,8 @@
 class ParqtelOss < Formula
   desc "Ultra-lightweight SRE observability engine: OTLP → Parquet, single binary"
   homepage "https://github.com/parqtel/parqtel-oss"
-  license "Apache-2.0"
-
-  # `version` must be set BEFORE the `url` lines below — the URL
-  # strings use `#{version}` interpolation, and Ruby evaluates the
-  # interpolation at the time the `url` line runs, not lazily. If
-  # `version` is unset, the URLs would be hard-coded to
-  # `.../download/v/...` and the install would 404. `Version.detect`
-  # on the resulting URL would then also fail and fall back to
-  # matching the trailing `64` of `arm64` as the version number.
   version "0.1.0"
+  license "Apache-2.0"
 
   # `brew livecheck` watches the upstream parqtel-oss GitHub releases
   # for new `v*` tags. The `github_latest` strategy is auto-inferred
