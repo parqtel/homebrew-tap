@@ -54,7 +54,11 @@ jobs:
           test "$(git -C "$(brew --repository parqtel/tap)" rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: brew style
-        run: brew style parqtel/tap
+        # Scope to the formula only — `brew style parqtel/tap` (no
+        # formula argument) would lint every file in the repository
+        # (shell scripts, workflow YAML expressions, docs), which is
+        # outside Homebrew's remit for a tap.
+        run: brew style parqtel/tap/parqtel-oss
 
       - name: brew audit (online — checks URL reachability)
         env:
