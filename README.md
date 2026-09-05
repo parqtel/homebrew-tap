@@ -2,15 +2,22 @@
 
 Homebrew tap for [**parqtel/parqtel-oss**](https://github.com/parqtel/parqtel-oss) — the ultra-lightweight SRE observability engine that ingests OpenTelemetry (OTLP) metrics, logs, and traces and stores them as compressed Apache Parquet files. ~15 MB single binary, no JVM, no service mesh.
 
-> **TL;DR** — `brew install parqtel/parqtel/parqtel-oss`
+> **TL;DR** — `brew install parqtel/tap/parqtel-oss`
+
+The tap name `parqtel/tap` is what Homebrew derives from this repository (`parqtel/homebrew-tap` → strip `homebrew-` prefix). The one-liner above auto-taps the repo and installs the formula.
 
 ---
 
 ## Install
 
 ```bash
-brew tap parqtel/parqtel
+# Option A: one command (auto-taps parqtel/tap)
+brew install parqtel/tap/parqtel-oss
+
+# Option B: tap first, then install by short name
+brew tap parqtel/tap
 brew install parqtel-oss
+
 parqtel --version
 ```
 
@@ -27,7 +34,7 @@ brew upgrade parqtel-oss
 
 ```bash
 brew uninstall parqtel-oss
-brew untap parqtel/parqtel  # optional
+brew untap parqtel/tap  # optional
 ```
 
 Parqtel stores its data in the directory pointed to by `PARQTEL_DATA_DIR` (default `./data`). Removing the formula does **not** remove this directory; delete it manually if you want a clean slate.
@@ -137,7 +144,7 @@ The script is idempotent — it will:
 - upload assets with `--clobber` (overwrite any with the same name)
 - delete obsolete assets that match a previous naming scheme (e.g. `parqtel-oss-darwin-arm64.tar.gz` without the version)
 
-After the release assets are in place, the audit CI will go green and `brew install parqtel/parqtel/parqtel-oss` will succeed. From v0.2.0 onward, the `[Build & Publish Tarballs]` workflow handles step 1 and `[Update Formula]` handles step 2 — no manual intervention needed.
+After the release assets are in place, the audit CI will go green and `brew install parqtel/tap/parqtel-oss` will succeed. From v0.2.0 onward, the `[Build & Publish Tarballs]` workflow handles step 1 and `[Update Formula]` handles step 2 — no manual intervention needed.
 
 For continuous automation, see [`docs/RELEASE_COORDINATION.md`](docs/RELEASE_COORDINATION.md#optional-zero-touch-coordination).
 
@@ -178,11 +185,11 @@ For continuous automation, see [`docs/RELEASE_COORDINATION.md`](docs/RELEASE_COO
 ### Style and audit cheatsheet
 
 ```bash
-brew tap parqtel/parqtel "$(git rev-parse --show-toplevel)"
-brew style            parqtel/parqtel
-brew audit --strict   parqtel/parqtel/parqtel-oss
-brew install --build-from-source parqtel/parqtel/parqtel-oss
-brew test             parqtel/parqtel/parqtel-oss
+brew tap parqtel/tap "$(git rev-parse --show-toplevel)"
+brew style            parqtel/tap
+brew audit --strict   parqtel/tap/parqtel-oss
+brew install          parqtel/tap/parqtel-oss
+brew test             parqtel/tap/parqtel-oss
 ```
 
 `brew style` and `brew audit --new --strict` are also run on every PR via `.github/workflows/audit.yml`.

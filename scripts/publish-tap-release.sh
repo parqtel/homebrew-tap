@@ -81,7 +81,7 @@ Prebuilt parqtel-oss binaries for the Homebrew tap.
 
 These tarballs are consumed by the \`parqtel-oss\` Homebrew formula in
 ${REPO}. After this release is published, \`brew audit --online\`
-will go green and \`brew install parqtel/parqtel/parqtel-oss\`
+will go green and \`brew install parqtel/tap/parqtel-oss\`
 will download the matching platform tarball.
 
 Built from parqtel/parqtel-oss @ v${VERSION} (commit ${UPSTREAM_REF}…).
