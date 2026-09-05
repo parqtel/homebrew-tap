@@ -110,29 +110,34 @@ The PR is gated by [`audit.yml`](.github/workflows/audit.yml), which `brew style
 
 ### One-shot bootstrap for v0.1.0
 
-For the very first tap release (v0.1.0), the GitHub Actions workflow can't run until the formula is committed. The tap ships a helper script ([`scripts/publish-v0.1.0.sh`](scripts/publish-v0.1.0.sh)) that does the equivalent of step 1 from your laptop:
+For the very first tap release (v0.1.0), the GitHub Actions workflow can't run until the formula is committed. The tap ships a helper script ([`scripts/publish-tap-release.sh`](scripts/publish-tap-release.sh)) that does the equivalent of step 1 from your laptop:
 
 ```bash
 # 1. Stage the four prebuilt tarballs (downloaded from the parqtel-oss
 #    v0.1.0 release artefacts — or built locally — see the script header).
 ls /tmp/parqtel-release/v0.1.0/
-#  parqtel-oss-darwin-amd64.tar.gz
-#  parqtel-oss-darwin-amd64.tar.gz.sha256
-#  parqtel-oss-darwin-arm64.tar.gz
-#  parqtel-oss-darwin-arm64.tar.gz.sha256
-#  parqtel-oss-linux-amd64.tar.gz
-#  parqtel-oss-linux-amd64.tar.gz.sha256
-#  parqtel-oss-linux-arm64.tar.gz
-#  parqtel-oss-linux-arm64.tar.gz.sha256
+#  parqtel-oss-v0.1.0-darwin-amd64.tar.gz
+#  parqtel-oss-v0.1.0-darwin-amd64.tar.gz.sha256
+#  parqtel-oss-v0.1.0-darwin-arm64.tar.gz
+#  parqtel-oss-v0.1.0-darwin-arm64.tar.gz.sha256
+#  parqtel-oss-v0.1.0-linux-amd64.tar.gz
+#  parqtel-oss-v0.1.0-linux-amd64.tar.gz.sha256
+#  parqtel-oss-v0.1.0-linux-arm64.tar.gz
+#  parqtel-oss-v0.1.0-linux-arm64.tar.gz.sha256
 
 # 2. Authenticate gh (one-time per machine)
 gh auth login
 
-# 3. Publish
-./scripts/publish-v0.1.0.sh
+# 3. Publish (or update, if the release already exists)
+./scripts/publish-tap-release.sh
 ```
 
-After the release is live, the `[Update Formula]` workflow is a no-op (the formula is already at v0.1.0). From v0.2.0 onward, the `[Build & Publish Tarballs]` workflow handles step 1 and `[Update Formula]` handles step 2 — no manual intervention needed.
+The script is idempotent — it will:
+- create the v0.1.0 release if it does not exist
+- upload assets with `--clobber` (overwrite any with the same name)
+- delete obsolete assets that match a previous naming scheme (e.g. `parqtel-oss-darwin-arm64.tar.gz` without the version)
+
+After the release assets are in place, the audit CI will go green and `brew install parqtel/parqtel/parqtel-oss` will succeed. From v0.2.0 onward, the `[Build & Publish Tarballs]` workflow handles step 1 and `[Update Formula]` handles step 2 — no manual intervention needed.
 
 For continuous automation, see [`docs/RELEASE_COORDINATION.md`](docs/RELEASE_COORDINATION.md#optional-zero-touch-coordination).
 
