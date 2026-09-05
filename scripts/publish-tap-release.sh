@@ -38,6 +38,10 @@ for f in "${REQUIRED[@]}"; do
     echo "::error::Missing asset: $ASSETS/$f"
     exit 1
   fi
+  if [ ! -f "$ASSETS/$f.sha256" ]; then
+    echo "::error::Missing sha256 sidecar: $ASSETS/$f.sha256"
+    exit 1
+  fi
 done
 
 echo "==> Checking gh auth"
@@ -46,14 +50,26 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
+# Pre-compute the full asset paths (tarballs + sha256 sidecars) so we
+# don't depend on bash parameter-expansion tricks. The previous
+# version used ${REQUIRED[@]/#/$ASSETS/.sha256} which substituted
+# `$ASSETS/.sha256` at the *prefix* of each item, producing paths
+# like `$ASSETS/.sha256parqtel-oss-...tar.gz` — clearly broken.
+TARBALL_PATHS=()
+SHASUM_PATHS=()
+for f in "${REQUIRED[@]}"; do
+  TARBALL_PATHS+=("$ASSETS/$f")
+  SHASUM_PATHS+=("$ASSETS/$f.sha256")
+done
+
 # Inspect existing release
 if gh release view "v${VERSION}" --repo "$REPO" >/dev/null 2>&1; then
   echo "==> Release v${VERSION} already exists; will overwrite assets of the same name"
   # `gh release upload` with --clobber overwrites any existing files of
   # the same name and is a no-op for new ones.
   gh release upload "v${VERSION}" --repo "$REPO" --clobber \
-    "${REQUIRED[@]/#/$ASSETS/}" \
-    "${REQUIRED[@]/#/$ASSETS/.sha256}"
+    "${TARBALL_PATHS[@]}" \
+    "${SHASUM_PATHS[@]}"
 else
   echo "==> Creating release v${VERSION} in $REPO"
   UPSTREAM_REF=$(git ls-remote https://github.com/parqtel/parqtel-oss.git "refs/tags/v${VERSION}" 2>/dev/null | awk '{print $1}' | head -c 12 || echo "unknown")
@@ -76,8 +92,8 @@ is pushed to parqtel/parqtel-oss (or daily via the schedule poll).
 EOF
 )" \
     --target main \
-    "${REQUIRED[@]/#/$ASSETS/}" \
-    "${REQUIRED[@]/#/$ASSETS/.sha256}"
+    "${TARBALL_PATHS[@]}" \
+    "${SHASUM_PATHS[@]}"
 fi
 
 # Delete obsolete assets from a previous scheme (parqtel-oss-<platform>.tar.gz
