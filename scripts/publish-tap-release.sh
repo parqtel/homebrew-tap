@@ -106,12 +106,17 @@ OBSOLETE=(
   "parqtel-oss-linux-amd64.tar.gz"
 )
 for f in "${OBSOLETE[@]}"; do
+  # `gh release delete-asset` takes the asset NAME (not id) and fails
+  # if the asset does not exist, so gate on its presence first.
   if gh release view "v${VERSION}" --repo "$REPO" --json assets \
-     --jq ".assets[] | select(.name == \"$f\") | .id" 2>/dev/null | grep -q .; then
-    asset_id=$(gh release view "v${VERSION}" --repo "$REPO" --json assets \
-               --jq ".assets[] | select(.name == \"$f\") | .id")
-    echo "==> Deleting obsolete asset: $f (id=$asset_id)"
-    gh release delete-asset "v${VERSION}" --repo "$REPO" --yes "$asset_id" || true
+     --jq ".assets[].name" 2>/dev/null | grep -qx "$f"; then
+    echo "==> Deleting obsolete asset: $f"
+    gh release delete-asset "v${VERSION}" "$f" --repo "$REPO" --yes || true
+  fi
+  if gh release view "v${VERSION}" --repo "$REPO" --json assets \
+     --jq ".assets[].name" 2>/dev/null | grep -qx "$f.sha256"; then
+    echo "==> Deleting obsolete asset: $f.sha256"
+    gh release delete-asset "v${VERSION}" "$f.sha256" --repo "$REPO" --yes || true
   fi
 done
 
