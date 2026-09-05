@@ -54,7 +54,7 @@ jobs:
           test "$(git -C "$(brew --repository parqtel/tap)" rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: brew style
-        run: brew style --fix=never parqtel/tap
+        run: brew style parqtel/tap
 
       - name: brew audit (online — checks URL reachability)
         env:
