@@ -25,3 +25,7 @@ tarballs/
 *.tar.gz.sha256
 !tarballs/.gitkeep
 !Formula/parqtel-oss.rb
+
+# Runtime data created when smoke-testing the parqtel binary in this
+# directory (PARQTEL_DATA_DIR defaults to ./data)
+data/
