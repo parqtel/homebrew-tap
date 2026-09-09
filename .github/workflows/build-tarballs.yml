@@ -128,7 +128,7 @@ jobs:
             platform: darwin-arm64
     steps:
       - name: Checkout upstream parqtel-oss
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: parqtel/parqtel-oss
           ref: ${{ needs.resolve-version.outputs.ref }}
@@ -169,7 +169,7 @@ jobs:
           sha256sum "${ARTIFACT}.tar.gz" | tee "${ARTIFACT}.tar.gz.sha256"
           ls -lh "${ARTIFACT}.tar.gz"*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: parqtel-oss-${{ matrix.platform }}
           path: |
@@ -184,7 +184,7 @@ jobs:
     needs: [resolve-version, build-binaries]
     if: needs.resolve-version.outputs.skip != 'true' && needs.resolve-version.outputs.version != ''
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -196,7 +196,7 @@ jobs:
           cat artifacts/*.sha256
 
       - name: Create / update release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.resolve-version.outputs.version }}
           name: parqtel-oss v${{ needs.resolve-version.outputs.version }}
